@@ -1,0 +1,10 @@
+langgraph
+langchain
+langchain-google-genai 
+python-dotenv 
+langgraph-sdk 
+langgraph-cli
+langgraph-api 
+fastapi 
+google-genai
+langgraph-cli[inmem]
