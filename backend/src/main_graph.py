@@ -1,20 +1,16 @@
 import os
 import json
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage, HumanMessage, trim_messages
-from langgraph.types import Send, Command
-from langgraph.checkpoint.memory import InMemorySaver
-from langchain_core.runnables import RunnableConfig
-from google.genai import Client
 from langgraph.prebuilt import create_react_agent
 from typing import TypedDict, Annotated, List, Optional, Literal, Any, Dict, Sequence
+from pydantic import BaseModel, Field
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.graph import StateGraph, MessagesState, START, END, add_messages
+from langchain_core.messages import AIMessage, HumanMessage, trim_messages
 from typing_extensions import TypedDict, Annotated
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
-from pydantic import BaseModel, Field
 import operator
 
 load_dotenv()
@@ -68,6 +64,7 @@ AGENT_PROMPTS = {
     Respond with ONLY a JSON object containing a single key 'plan', which is a list of agent names to be executed in order.
     Example: {{"plan": ["Poisoning", "Clash", "Write"]}}
     """,
+
     "Write": """
     You are the 'Write' Agent. Your role is to optimize the clarity and structure of the context.
     Analyze the following context and provide actionable recommendations.
@@ -85,37 +82,43 @@ AGENT_PROMPTS = {
     Respond with ONLY a JSON object containing two keys: 'analysis_results' (a list of strings describing your findings) and 'recommendations' (a list of strings with your suggestions).
     Example: {{"analysis_results": ["The main task is not clearly stated."], "recommendations": ["Rewrite the task to start with 'Your primary goal is...'."]}}
     """,
-    # The prompts for Select, Compress, Isolate, Poisoning, Distraction, and Clash follow the same JSON output structure.
+
     "Select": """You are the 'Select' Agent. Your role is to ensure only the most relevant knowledge and data are included in the context. Analyze the following context:
     ---
     {input_context}
     ---
     Respond with ONLY a JSON object containing 'analysis_results' and 'recommendations' lists. Focus on data relevance and necessity.""",
+
     "Compress": """You are the 'Compress' Agent. Your role is to optimize context length by identifying redundancies. Analyze the following context:
     ---
     {input_context}
     ---
     Respond with ONLY a JSON object containing 'analysis_results' and 'recommendations' lists. Suggest summarization or removal of verbose sections.""",
+
     "Isolate": """You are the 'Isolate' Agent. Your role is to recommend strategies for context isolation. Analyze the following context:
     ---
     {input_context}
     ---
     Respond with ONLY a JSON object containing 'analysis_results' and 'recommendations' lists. Focus on partitioning distinct tasks or states.""",
+
     "Poisoning": """You are the 'Poisoning Detector'. Scan the context for hallucinations, factual inaccuracies, or explicit errors. Analyze the following context:
     ---
     {input_context}
     ---
     Respond with ONLY a JSON object containing 'analysis_results' and 'recommendations' lists. Highlight any poisoned or erroneous information.""",
+
     "Distraction": """You are the 'Distraction Filter'. Identify irrelevant information that could distract the main LLM. Analyze the following context:
     ---
     {input_context}
     ---
     Respond with ONLY a JSON object containing 'analysis_results' and 'recommendations' lists. Identify off-topic or low-value information for pruning.""",
+
     "Clash": """You are the 'Clash Detector'. Identify contradictory information within the context. Analyze the following context:
     ---
     {input_context}
     ---
     Respond with ONLY a JSON object containing 'analysis_results' and 'recommendations' lists. Pinpoint conflicting instructions or data points.""",
+
     "Guardian": """
     You are the Guardian Agent. Review the collected analysis and recommendations to provide a final quality assessment.
 
@@ -134,6 +137,7 @@ AGENT_PROMPTS = {
     Example (issues found): {{"context_issues": ["Critical data error flagged by Poisoning agent must be re-evaluated."]}}
     Example (approved): {{"context_issues": []}}
     """,
+    
     "Synthesizer": """
     You are the Synthesizer Agent. Your task is to rewrite the original context by applying the provided recommendations.
 
@@ -169,7 +173,7 @@ def create_agent_chain(prompt_template: str, parser):
     return prompt | llm | parser
 
 def reasoning_planner(state: AgentState):
-    print("--- 🧠 Reasoning Planner ---")
+    print("--- Reasoning Planner ---")
     planner_chain = create_agent_chain(AGENT_PROMPTS["ReasoningPlanner"], JsonOutputParser())
     
     result = planner_chain.invoke({
@@ -183,7 +187,7 @@ def reasoning_planner(state: AgentState):
 
 def agent_executor(state: AgentState):
     agent_name = state["next_agent"]
-    print(f"--- 🛠️ Agent Executor: {agent_name} ---")
+    print(f"--- Agent Executor: {agent_name} ---")
     
     # All analysis agents use a JSON parser
     agent_chain = create_agent_chain(AGENT_PROMPTS[agent_name], JsonOutputParser())
@@ -204,7 +208,7 @@ def agent_executor(state: AgentState):
     return result
 
 def guardian_agent(state: AgentState):
-    print("--- 🛡️ Guardian Agent ---")
+    print("--- Guardian Agent ---")
     guardian_chain = create_agent_chain(AGENT_PROMPTS["Guardian"], JsonOutputParser())
     
     # We pass the accumulated analysis/recommendations as a string
@@ -223,7 +227,7 @@ def guardian_agent(state: AgentState):
 
 
 def synthesizer(state: AgentState):
-    print("--- ✨ Synthesizer ---")
+    print("--- Synthesizer ---")
     synthesizer_chain = create_agent_chain(AGENT_PROMPTS["Synthesizer"], StrOutputParser())
     
     optimized_context = synthesizer_chain.invoke({
@@ -270,11 +274,15 @@ workflow.add_conditional_edges(
 
 workflow.add_edge("synthesizer", END)
 
+# Note:
+# I haven't added memory, as I only run the graph with 'langgraph dev',
+# and during that run the InMemory settings are either way ignored (it caches graphs thread automatically for the execution)
+
 # Compile the graph into a runnable application
 build_graph = workflow.compile()
 
 # --- 6. EXAMPLE CONTEXT (TESTS) ---
-#plan: Plan = llm.with_structured_output(Plan).invoke(planner_prompt.format(task=state["task"], plan=state["plan"]))
+
 initial_context = """
 Your goal is to generate sophisticated and diverse web search queries. These queries are intended for an advanced automated web research tool capable of analyzing complex results, following links, and synthesizing information.
 
